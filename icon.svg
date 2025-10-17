@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <rect width="128" height="128" fill="#007ACC" rx="8"/>
+  <g fill="white">
+    <!-- Search magnifying glass -->
+    <circle cx="45" cy="45" r="20" stroke="white" stroke-width="4" fill="none"/>
+    <line x1="61" y1="61" x2="75" y2="75" stroke="white" stroke-width="4" stroke-linecap="round"/>
+    
+    <!-- Symbol brackets -->
+    <text x="80" y="35" font-family="monospace" font-size="24" font-weight="bold">{</text>
+    <text x="80" y="65" font-family="monospace" font-size="24" font-weight="bold">}</text>
+    
+    <!-- Fuzzy search dots -->
+    <circle cx="25" cy="90" r="3"/>
+    <circle cx="40" cy="95" r="3"/>
+    <circle cx="55" cy="90" r="3"/>
+    <circle cx="70" cy="95" r="3"/>
+    <circle cx="85" cy="90" r="3"/>
+    <circle cx="100" cy="95" r="3"/>
+  </g>
+</svg>

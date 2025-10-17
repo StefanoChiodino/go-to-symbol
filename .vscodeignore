@@ -1,0 +1,41 @@
+# VSCode configuration and test files
+.vscode/**
+.vscode-test/**
+
+# Source files (only compiled JS should be included)
+src/**
+**/*.ts
+**/*.map
+
+# Development and build files
+node_modules/**
+.gitignore
+.yarnrc
+vsc-extension-quickstart.md
+**/tsconfig.json
+**/.eslintrc.json
+.eslintrc.json
+webpack.config.js
+.github/**
+
+# Documentation and development files
+.kiro/**
+icon.svg
+*.md.backup
+CONTRIBUTING.md
+PUBLISHING.md
+
+# Test files
+test/**
+**/*.test.js
+**/*.test.ts
+coverage/**
+
+# Logs and temporary files
+*.log
+.DS_Store
+Thumbs.db
+
+# Package manager files
+yarn.lock
+package-lock.json

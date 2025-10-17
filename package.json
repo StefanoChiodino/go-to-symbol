@@ -1,0 +1,293 @@
+{
+  "name": "go-to-symbol",
+  "displayName": "Go to Symbol",
+  "description": "Intelligent symbol search for large repositories with fuzzy pattern matching",
+  "version": "0.1.0",
+  "publisher": "go-to-symbol",
+  "author": {
+    "name": "Go to Symbol Team"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/example/go-to-symbol#readme",
+  "bugs": {
+    "url": "https://github.com/example/go-to-symbol/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/example/go-to-symbol.git"
+  },
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other",
+    "Extension Packs"
+  ],
+  "keywords": [
+    "symbol",
+    "search",
+    "navigation",
+    "fuzzy",
+    "goto",
+    "find",
+    "code",
+    "class",
+    "function",
+    "variable",
+    "python",
+    "typescript",
+    "javascript",
+    "large-repository",
+    "performance"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "go-to-symbol.search",
+        "title": "Go to Symbol",
+        "category": "Go to Symbol",
+        "icon": "$(search)"
+      },
+      {
+        "command": "go-to-symbol.clearCache",
+        "title": "Clear Cache",
+        "category": "Go to Symbol",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "go-to-symbol.showErrorStats",
+        "title": "Show Error Statistics",
+        "category": "Go to Symbol",
+        "icon": "$(info)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "go-to-symbol.search",
+        "key": "cmd+k cmd+s",
+        "mac": "cmd+k cmd+s",
+        "win": "ctrl+k ctrl+s",
+        "linux": "ctrl+k ctrl+s"
+      }
+    ],
+    "configuration": {
+      "title": "Go to Symbol",
+      "properties": {
+        "goToSymbol.includePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/*.py",
+            "**/*.js",
+            "**/*.ts",
+            "**/*.jsx",
+            "**/*.tsx",
+            "**/*.java",
+            "**/*.cs",
+            "**/*.cpp",
+            "**/*.c",
+            "**/*.h"
+          ],
+          "description": "File patterns to include in symbol search (glob patterns)",
+          "scope": "resource"
+        },
+        "goToSymbol.excludePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/node_modules/**",
+            "**/venv/**",
+            "**/__pycache__/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/out/**",
+            "**/.git/**",
+            "**/coverage/**",
+            "**/*.min.js",
+            "**/*.bundle.js"
+          ],
+          "description": "File patterns to exclude from symbol search (glob patterns)",
+          "scope": "resource"
+        },
+        "goToSymbol.maxResults": {
+          "type": "number",
+          "default": 100,
+          "minimum": 10,
+          "maximum": 1000,
+          "description": "Maximum number of search results to display",
+          "scope": "resource"
+        },
+        "goToSymbol.fuzzyMatch": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable fuzzy pattern matching for symbol names",
+          "scope": "resource"
+        },
+        "goToSymbol.symbolTypes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "class",
+              "function",
+              "method",
+              "variable",
+              "interface",
+              "enum",
+              "constant",
+              "property"
+            ]
+          },
+          "default": [
+            "class",
+            "function",
+            "method",
+            "variable",
+            "interface"
+          ],
+          "description": "Symbol types to search for",
+          "scope": "resource"
+        },
+        "goToSymbol.performance.maxFileSize": {
+          "type": "number",
+          "default": 1048576,
+          "minimum": 10240,
+          "maximum": 10485760,
+          "description": "Maximum file size in bytes to process (default: 1MB)",
+          "scope": "resource"
+        },
+        "goToSymbol.performance.maxFiles": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 100,
+          "maximum": 100000,
+          "description": "Maximum number of files to scan in workspace",
+          "scope": "resource"
+        },
+        "goToSymbol.performance.searchTimeout": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 1000,
+          "maximum": 30000,
+          "description": "Search timeout in milliseconds",
+          "scope": "resource"
+        },
+        "goToSymbol.performance.cacheSize": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 100,
+          "maximum": 10000,
+          "description": "Maximum number of files to keep in cache",
+          "scope": "resource"
+        },
+        "goToSymbol.performance.parallelWorkers": {
+          "type": "number",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 16,
+          "description": "Number of parallel workers for file processing",
+          "scope": "resource"
+        },
+        "goToSymbol.customPatterns": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "class": {
+                "type": "string",
+                "description": "Regex pattern for class definitions"
+              },
+              "function": {
+                "type": "string",
+                "description": "Regex pattern for function definitions"
+              },
+              "variable": {
+                "type": "string",
+                "description": "Regex pattern for variable definitions"
+              }
+            }
+          },
+          "default": {},
+          "description": "Custom regex patterns for different languages (key: file extension, value: pattern object)",
+          "scope": "resource"
+        },
+        "goToSymbol.enableFallback": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable fallback to VSCode's default symbol search when enhanced search fails",
+          "scope": "resource"
+        },
+        "goToSymbol.debug": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable debug logging for troubleshooting",
+          "scope": "resource"
+        },
+        "goToSymbol.progressType": {
+          "type": "string",
+          "enum": [
+            "notification",
+            "statusbar",
+            "window",
+            "silent"
+          ],
+          "default": "notification",
+          "description": "Type of progress indicator to show during search operations",
+          "scope": "resource"
+        },
+        "goToSymbol.showDetailedProgress": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show detailed progress information including file counts and processing phases",
+          "scope": "resource"
+        },
+        "goToSymbol.enableSuccessNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show success notifications when search completes",
+          "scope": "resource"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "lint:fix": "eslint src --ext ts --fix",
+    "test": "npm run compile && node ./out/test/runTest.js",
+    "test:unit": "npm run compile && mocha ./out/test/suite/*.test.js --timeout 30000",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "clean": "rm -rf out/",
+    "rebuild": "npm run clean && npm run compile"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "16.x",
+    "@types/vscode": "^1.74.0",
+    "@typescript-eslint/eslint-plugin": "^5.45.0",
+    "@typescript-eslint/parser": "^5.45.0",
+    "@vscode/test-electron": "^2.2.0",
+    "@vscode/vsce": "^2.15.0",
+    "eslint": "^8.28.0",
+    "glob": "^8.1.0",
+    "mocha": "^10.8.2",
+    "typescript": "^4.9.4"
+  }
+}
