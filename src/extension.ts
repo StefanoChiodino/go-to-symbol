@@ -292,6 +292,24 @@ async function showRealTimeSearchPicker(): Promise<void> {
             const searchOptions = getSearchOptionsFromConfig();
             console.log('[Go to Symbol] Search options:', searchOptions);
             
+            // First, let's try a simple direct search to see if anything works
+            console.log('[Go to Symbol] Testing direct search with "class"...');
+            const testResults = await searchController!.executeSearch('class', {
+                ...searchOptions,
+                maxResults: 10
+            });
+            console.log('[Go to Symbol] Test search found', testResults.length, 'results');
+            
+            if (testResults.length > 0) {
+                console.log('[Go to Symbol] Sample result:', testResults[0]);
+                // If direct search works, show those results immediately
+                allSymbols = testResults;
+                isLoading = false;
+                quickPick.busy = false;
+                updateQuickPickItems('');
+                return;
+            }
+            
             // Get all symbols by scanning the workspace directly
             const symbolsMap = await searchController!.getAllSymbols(searchOptions);
             console.log('[Go to Symbol] Found', symbolsMap.size, 'files with symbols');
@@ -374,13 +392,13 @@ async function showRealTimeSearchPicker(): Promise<void> {
         // Debounce search to avoid too many updates
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(() => {
-            if (query.trim() && allSymbols.length === 0 && !isLoading) {
-                // If we have a query but no symbols loaded, try a direct search
+            if (query.trim()) {
+                // Always do direct search for now to ensure it works
                 performDirectSearch(query);
             } else {
                 updateQuickPickItems(query);
             }
-        }, 100);
+        }, 200);
     });
 
     // Handle selection

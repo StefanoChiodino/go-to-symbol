@@ -12,13 +12,13 @@ A VSCode extension that provides intelligent symbol search functionality for lar
 - **High Performance**: Optimized for large repositories (100MB+) with sub-2-second response times
 - **Smart Caching**: LRU cache with file modification tracking for fast repeated searches
 - **Parallel Processing**: Multi-threaded file processing for maximum performance
-- **Seamless Integration**: Replaces VSCode's default Cmd+T shortcut with enhanced functionality
+- **Seamless Integration**: Uses Cmd+Shift+T shortcut for enhanced symbol search
 - **Highly Configurable**: Extensive settings for file patterns, symbol types, and performance tuning
 
 ## 📖 Usage
 
 ### Basic Search
-1. Press `Cmd+T` (Mac) or `Ctrl+T` (Windows/Linux) to open the symbol search
+1. Press `Cmd+Shift+T` (Mac) or `Ctrl+Shift+T` (Windows/Linux) to open the symbol search
 2. Type a partial symbol name using fuzzy matching patterns:
    - `AccInv` → finds `AccountInvoice`, `AcceptInvoice`, etc.
    - `getUserData` → finds `getUserData`, `getUsrData`, etc.

@@ -72,10 +72,10 @@
     "keybindings": [
       {
         "command": "go-to-symbol.search",
-        "key": "cmd+ctrl+t",
-        "mac": "cmd+ctrl+t",
-        "win": "ctrl+alt+t",
-        "linux": "ctrl+alt+t"
+        "key": "cmd+shift+t",
+        "mac": "cmd+shift+t", 
+        "win": "ctrl+shift+t",
+        "linux": "ctrl+shift+t"
       }
     ],
     "configuration": {
