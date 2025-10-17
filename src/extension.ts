@@ -292,24 +292,6 @@ async function showRealTimeSearchPicker(): Promise<void> {
             const searchOptions = getSearchOptionsFromConfig();
             console.log('[Go to Symbol] Search options:', searchOptions);
             
-            // First, let's try a simple direct search to see if anything works
-            console.log('[Go to Symbol] Testing direct search with "class"...');
-            const testResults = await searchController!.executeSearch('class', {
-                ...searchOptions,
-                maxResults: 10
-            });
-            console.log('[Go to Symbol] Test search found', testResults.length, 'results');
-            
-            if (testResults.length > 0) {
-                console.log('[Go to Symbol] Sample result:', testResults[0]);
-                // If direct search works, show those results immediately
-                allSymbols = testResults;
-                isLoading = false;
-                quickPick.busy = false;
-                updateQuickPickItems('');
-                return;
-            }
-            
             // Get all symbols by scanning the workspace directly
             const symbolsMap = await searchController!.getAllSymbols(searchOptions);
             console.log('[Go to Symbol] Found', symbolsMap.size, 'files with symbols');
@@ -339,6 +321,18 @@ async function showRealTimeSearchPicker(): Promise<void> {
             }
             
             console.log('[Go to Symbol] Total symbols loaded:', allSymbols.length);
+            
+            // If no symbols found, try a direct search as fallback
+            if (allSymbols.length === 0) {
+                console.log('[Go to Symbol] No symbols found, trying direct search fallback...');
+                const testResults = await searchController!.executeSearch('class', {
+                    ...searchOptions,
+                    maxResults: 50
+                });
+                console.log('[Go to Symbol] Fallback search found', testResults.length, 'results');
+                allSymbols = testResults;
+            }
+            
             isLoading = false;
             quickPick.busy = false;
             
@@ -354,7 +348,7 @@ async function showRealTimeSearchPicker(): Promise<void> {
 
     // Update QuickPick items based on query
     const updateQuickPickItems = (query: string) => {
-        if (isLoading && !query) {
+        if (isLoading && allSymbols.length === 0) {
             quickPick.items = [{
                 label: '$(loading~spin) Loading symbols...',
                 description: 'Please wait while symbols are being indexed',
@@ -364,15 +358,31 @@ async function showRealTimeSearchPicker(): Promise<void> {
             return;
         }
 
+        if (allSymbols.length === 0) {
+            quickPick.items = [{
+                label: '$(info) No symbols found',
+                description: 'Try typing to search or check console for errors',
+                detail: '',
+                searchResult: null as any
+            }];
+            return;
+        }
+
         let filteredResults: SearchResult[];
         
         if (!query.trim()) {
-            // Show recent/popular symbols when no query
+            // Show all symbols when no query, prioritizing classes and functions
             filteredResults = allSymbols
-                .filter(r => ['class', 'function', 'method'].includes(r.symbolType))
-                .slice(0, 50);
+                .sort((a, b) => {
+                    const typeOrder = { 'class': 0, 'function': 1, 'method': 2, 'variable': 3 };
+                    const aOrder = typeOrder[a.symbolType as keyof typeof typeOrder] ?? 4;
+                    const bOrder = typeOrder[b.symbolType as keyof typeof typeOrder] ?? 4;
+                    if (aOrder !== bOrder) return aOrder - bOrder;
+                    return a.symbolName.localeCompare(b.symbolName);
+                })
+                .slice(0, 100);
         } else {
-            // Filter symbols based on query
+            // Filter symbols based on query with real-time matching
             filteredResults = filterSymbolsRealTime(allSymbols, query);
         }
 
@@ -384,6 +394,11 @@ async function showRealTimeSearchPicker(): Promise<void> {
         }));
 
         quickPick.items = quickPickItems;
+        
+        // Log for debugging
+        if (query.trim()) {
+            console.log(`[Go to Symbol] Filtered "${query}" -> ${filteredResults.length} results`);
+        }
     };
 
     // Handle value changes for real-time search
@@ -392,13 +407,16 @@ async function showRealTimeSearchPicker(): Promise<void> {
         // Debounce search to avoid too many updates
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(() => {
-            if (query.trim()) {
-                // Always do direct search for now to ensure it works
+            if (allSymbols.length > 0) {
+                // Use pre-loaded symbols for instant filtering
+                updateQuickPickItems(query);
+            } else if (query.trim()) {
+                // Fall back to direct search if symbols aren't loaded yet
                 performDirectSearch(query);
             } else {
                 updateQuickPickItems(query);
             }
-        }, 200);
+        }, 50); // Reduced debounce for more responsive typing
     });
 
     // Handle selection
@@ -421,19 +439,23 @@ async function showRealTimeSearchPicker(): Promise<void> {
         if (isLoading) return;
         
         console.log('[Go to Symbol] Performing direct search for:', query);
-        isLoading = true;
-        quickPick.busy = true;
         
+        // Don't show busy indicator for direct search to keep it responsive
         try {
             const searchOptions = getSearchOptionsFromConfig();
-            console.log('[Go to Symbol] Direct search options:', searchOptions);
             
             const results = await searchController!.executeSearch(query, {
                 ...searchOptions,
-                maxResults: 100
+                maxResults: 100,
+                timeoutMs: 2000 // Shorter timeout for real-time search
             });
             
             console.log('[Go to Symbol] Direct search found', results.length, 'results');
+            
+            // Update allSymbols with the results for future filtering
+            if (results.length > 0 && allSymbols.length === 0) {
+                allSymbols = results;
+            }
             
             const quickPickItems: SearchResultQuickPickItem[] = results.map(result => ({
                 label: `$(symbol-${getSymbolIcon(result.symbolType)}) ${result.symbolName}`,
@@ -451,9 +473,6 @@ async function showRealTimeSearchPicker(): Promise<void> {
                 detail: '',
                 searchResult: null as any
             }];
-        } finally {
-            isLoading = false;
-            quickPick.busy = false;
         }
     };
 
@@ -473,7 +492,10 @@ function filterSymbolsRealTime(symbols: SearchResult[], query: string): SearchRe
     const queryLower = query.toLowerCase();
     const results: Array<SearchResult & { matchScore: number }> = [];
 
-    for (const symbol of symbols) {
+    // Limit search to first 5000 symbols for performance
+    const searchSymbols = symbols.slice(0, 5000);
+
+    for (const symbol of searchSymbols) {
         const symbolNameLower = symbol.symbolName.toLowerCase();
         let score = 0;
 
@@ -513,7 +535,7 @@ function filterSymbolsRealTime(symbols: SearchResult[], query: string): SearchRe
     // Sort by score and return top results
     return results
         .sort((a, b) => b.matchScore - a.matchScore)
-        .slice(0, 100)
+        .slice(0, 50) // Reduced for better performance
         .map(({ matchScore, ...result }) => result);
 }
 
