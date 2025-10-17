@@ -273,150 +273,66 @@ function getSearchOptionsFromConfig(): SearchOptions {
  * Show real-time search picker with live filtering
  */
 async function showRealTimeSearchPicker(): Promise<void> {
-    // Pre-load all symbols for fast filtering
-    let allSymbols: SearchResult[] = [];
-    let isLoading = true;
+    console.log('[Go to Symbol] Starting simple search picker...');
     
     // Create QuickPick
     const quickPick = vscode.window.createQuickPick<SearchResultQuickPickItem>();
     quickPick.title = 'Go to Symbol';
-    quickPick.placeholder = 'Type to search symbols (e.g., AccTran, AccountTransaction)...';
+    quickPick.placeholder = 'Type to search symbols (e.g., class, def, AccTran)...';
     quickPick.matchOnDescription = false;
     quickPick.matchOnDetail = false;
-    quickPick.busy = true;
     
-    // Load symbols in background
-    const loadSymbols = async () => {
-        try {
-            console.log('[Go to Symbol] Starting symbol loading...');
-            const searchOptions = getSearchOptionsFromConfig();
-            console.log('[Go to Symbol] Search options:', searchOptions);
-            
-            // Get all symbols by scanning the workspace directly
-            const symbolsMap = await searchController!.getAllSymbols(searchOptions);
-            console.log('[Go to Symbol] Found', symbolsMap.size, 'files with symbols');
-            
-            // Convert symbols map to search results
-            allSymbols = [];
-            for (const [filePath, symbols] of symbolsMap) {
-                console.log('[Go to Symbol] Processing file:', filePath, 'with', symbols.length, 'symbols');
-                for (const symbol of symbols) {
-                    const result: SearchResult = {
-                        symbolName: symbol.name,
-                        symbolType: symbol.type,
-                        filePath,
-                        lineNumber: symbol.line,
-                        columnNumber: symbol.column || 0,
-                        preview: symbol.signature || symbol.name,
-                        score: 1.0,
-                        language: detectLanguageFromPath(filePath),
-                        context: {
-                            parent: symbol.parent,
-                            signature: symbol.signature,
-                            decorators: symbol.decorators
-                        }
-                    };
-                    allSymbols.push(result);
-                }
-            }
-            
-            console.log('[Go to Symbol] Total symbols loaded:', allSymbols.length);
-            
-            // If no symbols found, try a direct search as fallback
-            if (allSymbols.length === 0) {
-                console.log('[Go to Symbol] No symbols found, trying direct search fallback...');
-                const testResults = await searchController!.executeSearch('class', {
-                    ...searchOptions,
-                    maxResults: 50
-                });
-                console.log('[Go to Symbol] Fallback search found', testResults.length, 'results');
-                allSymbols = testResults;
-            }
-            
-            isLoading = false;
-            quickPick.busy = false;
-            
-            // Show initial results
-            updateQuickPickItems('');
-        } catch (error) {
-            console.error('[Go to Symbol] Error loading symbols:', error);
-            isLoading = false;
-            quickPick.busy = false;
-            quickPick.placeholder = 'Error loading symbols. Try typing to search...';
-        }
-    };
-
-    // Update QuickPick items based on query
-    const updateQuickPickItems = (query: string) => {
-        if (isLoading && allSymbols.length === 0) {
-            quickPick.items = [{
-                label: '$(loading~spin) Loading symbols...',
-                description: 'Please wait while symbols are being indexed',
-                detail: '',
-                searchResult: null as any
-            }];
-            return;
-        }
-
-        if (allSymbols.length === 0) {
-            quickPick.items = [{
-                label: '$(info) No symbols found',
-                description: 'Try typing to search or check console for errors',
-                detail: '',
-                searchResult: null as any
-            }];
-            return;
-        }
-
-        let filteredResults: SearchResult[];
-        
-        if (!query.trim()) {
-            // Show all symbols when no query, prioritizing classes and functions
-            filteredResults = allSymbols
-                .sort((a, b) => {
-                    const typeOrder = { 'class': 0, 'function': 1, 'method': 2, 'variable': 3 };
-                    const aOrder = typeOrder[a.symbolType as keyof typeof typeOrder] ?? 4;
-                    const bOrder = typeOrder[b.symbolType as keyof typeof typeOrder] ?? 4;
-                    if (aOrder !== bOrder) return aOrder - bOrder;
-                    return a.symbolName.localeCompare(b.symbolName);
-                })
-                .slice(0, 100);
-        } else {
-            // Filter symbols based on query with real-time matching
-            filteredResults = filterSymbolsRealTime(allSymbols, query);
-        }
-
-        const quickPickItems: SearchResultQuickPickItem[] = filteredResults.map(result => ({
-            label: `$(symbol-${getSymbolIcon(result.symbolType)}) ${result.symbolName}`,
-            description: result.preview,
-            detail: `${result.language} • ${getRelativePath(result.filePath)} • Line ${result.lineNumber + 1}`,
-            searchResult: result
-        }));
-
-        quickPick.items = quickPickItems;
-        
-        // Log for debugging
-        if (query.trim()) {
-            console.log(`[Go to Symbol] Filtered "${query}" -> ${filteredResults.length} results`);
-        }
-    };
-
-    // Handle value changes for real-time search
+    // Simple direct search approach - search as user types
     let searchTimeout: NodeJS.Timeout;
     quickPick.onDidChangeValue((query) => {
-        // Debounce search to avoid too many updates
         clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(() => {
-            if (allSymbols.length > 0) {
-                // Use pre-loaded symbols for instant filtering
-                updateQuickPickItems(query);
-            } else if (query.trim()) {
-                // Fall back to direct search if symbols aren't loaded yet
-                performDirectSearch(query);
-            } else {
-                updateQuickPickItems(query);
+        searchTimeout = setTimeout(async () => {
+            if (!query.trim()) {
+                quickPick.items = [{
+                    label: '$(info) Start typing to search symbols',
+                    description: 'Enter class names, function names, or any symbol',
+                    detail: '',
+                    searchResult: null as any
+                }];
+                return;
             }
-        }, 50); // Reduced debounce for more responsive typing
+
+            console.log('[Go to Symbol] Searching for:', query);
+            quickPick.busy = true;
+            
+            try {
+                // Simple direct file search using VSCode's built-in capabilities
+                const results = await simpleSymbolSearch(query);
+                console.log('[Go to Symbol] Found', results.length, 'results');
+                
+                if (results.length === 0) {
+                    quickPick.items = [{
+                        label: '$(info) No symbols found',
+                        description: `No matches for "${query}"`,
+                        detail: 'Try a different search term',
+                        searchResult: null as any
+                    }];
+                } else {
+                    const quickPickItems: SearchResultQuickPickItem[] = results.map(result => ({
+                        label: `$(symbol-${getSymbolIcon(result.symbolType)}) ${result.symbolName}`,
+                        description: result.preview,
+                        detail: `${result.language} • ${getRelativePath(result.filePath)} • Line ${result.lineNumber + 1}`,
+                        searchResult: result
+                    }));
+                    quickPick.items = quickPickItems;
+                }
+            } catch (error) {
+                console.error('[Go to Symbol] Search error:', error);
+                quickPick.items = [{
+                    label: '$(error) Search failed',
+                    description: 'Check console for details',
+                    detail: String(error),
+                    searchResult: null as any
+                }];
+            } finally {
+                quickPick.busy = false;
+            }
+        }, 300); // Reasonable debounce for typing
     });
 
     // Handle selection
@@ -434,51 +350,113 @@ async function showRealTimeSearchPicker(): Promise<void> {
         quickPick.dispose();
     });
 
-    // Perform direct search when symbols aren't pre-loaded
-    const performDirectSearch = async (query: string) => {
-        if (isLoading) return;
-        
-        console.log('[Go to Symbol] Performing direct search for:', query);
-        
-        // Don't show busy indicator for direct search to keep it responsive
-        try {
-            const searchOptions = getSearchOptionsFromConfig();
-            
-            const results = await searchController!.executeSearch(query, {
-                ...searchOptions,
-                maxResults: 100,
-                timeoutMs: 2000 // Shorter timeout for real-time search
-            });
-            
-            console.log('[Go to Symbol] Direct search found', results.length, 'results');
-            
-            // Update allSymbols with the results for future filtering
-            if (results.length > 0 && allSymbols.length === 0) {
-                allSymbols = results;
-            }
-            
-            const quickPickItems: SearchResultQuickPickItem[] = results.map(result => ({
-                label: `$(symbol-${getSymbolIcon(result.symbolType)}) ${result.symbolName}`,
-                description: result.preview,
-                detail: `${result.language} • ${getRelativePath(result.filePath)} • Line ${result.lineNumber + 1}`,
-                searchResult: result
-            }));
-
-            quickPick.items = quickPickItems;
-        } catch (error) {
-            console.error('[Go to Symbol] Direct search error:', error);
-            quickPick.items = [{
-                label: '$(error) Search failed',
-                description: 'Try a different query or check the console for errors',
-                detail: '',
-                searchResult: null as any
-            }];
-        }
-    };
-
-    // Show the QuickPick and start loading
+    // Show the QuickPick
     quickPick.show();
-    loadSymbols();
+}
+
+/**
+ * Simple symbol search using VSCode's file search and basic regex patterns
+ */
+async function simpleSymbolSearch(query: string): Promise<SearchResult[]> {
+    const results: SearchResult[] = [];
+    
+    try {
+        // Get workspace files using VSCode's built-in search
+        const files = await vscode.workspace.findFiles(
+            '**/*.{py,js,ts,jsx,tsx,java,cs,cpp,c,h}',
+            '**/node_modules/**',
+            100 // Limit files for performance
+        );
+        
+        console.log('[Go to Symbol] Found', files.length, 'files to search');
+        
+        // Search each file for symbols
+        for (const file of files.slice(0, 20)) { // Limit to first 20 files for now
+            try {
+                const document = await vscode.workspace.openTextDocument(file);
+                const content = document.getText();
+                const fileResults = extractSymbolsFromContent(content, file.fsPath, query);
+                results.push(...fileResults);
+                
+                if (results.length >= 50) break; // Limit total results
+            } catch (error) {
+                console.log('[Go to Symbol] Error reading file:', file.fsPath, error);
+            }
+        }
+        
+        // Sort by relevance
+        return results.sort((a, b) => b.score - a.score);
+        
+    } catch (error) {
+        console.error('[Go to Symbol] File search error:', error);
+        return [];
+    }
+}
+
+/**
+ * Extract symbols from file content using simple regex patterns
+ */
+function extractSymbolsFromContent(content: string, filePath: string, query: string): SearchResult[] {
+    const results: SearchResult[] = [];
+    const lines = content.split('\n');
+    const queryLower = query.toLowerCase();
+    
+    // Simple patterns for different symbol types
+    const patterns = [
+        // Python class
+        { regex: /^(\s*)class\s+([A-Za-z_][A-Za-z0-9_]*)/g, type: 'class' as SymbolType },
+        // Python function/method
+        { regex: /^(\s*)def\s+([A-Za-z_][A-Za-z0-9_]*)/g, type: 'function' as SymbolType },
+        // Python enum
+        { regex: /^(\s*)class\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*Enum[^)]*\)/g, type: 'enum' as SymbolType },
+        // Python variable with type annotation
+        { regex: /^(\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z]/g, type: 'variable' as SymbolType },
+        // JavaScript/TypeScript class
+        { regex: /^(\s*)(?:export\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)/g, type: 'class' as SymbolType },
+        // JavaScript/TypeScript function
+        { regex: /^(\s*)(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)/g, type: 'function' as SymbolType },
+        // JavaScript/TypeScript interface
+        { regex: /^(\s*)(?:export\s+)?interface\s+([A-Za-z_][A-Za-z0-9_]*)/g, type: 'interface' as SymbolType }
+    ];
+    
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+        const line = lines[lineIndex];
+        
+        for (const pattern of patterns) {
+            pattern.regex.lastIndex = 0; // Reset regex
+            const match = pattern.regex.exec(line);
+            
+            if (match && match[2]) {
+                const symbolName = match[2];
+                const symbolNameLower = symbolName.toLowerCase();
+                
+                // Check if symbol matches query
+                let score = 0;
+                if (symbolNameLower.includes(queryLower)) {
+                    if (symbolNameLower === queryLower) score = 100;
+                    else if (symbolNameLower.startsWith(queryLower)) score = 90;
+                    else if (matchesFuzzyPattern(symbolName, query)) score = 80;
+                    else score = 70;
+                    
+                    results.push({
+                        symbolName,
+                        symbolType: pattern.type,
+                        filePath,
+                        lineNumber: lineIndex,
+                        columnNumber: match.index || 0,
+                        preview: line.trim(),
+                        score,
+                        language: detectLanguageFromPath(filePath),
+                        context: {
+                            signature: line.trim()
+                        }
+                    });
+                }
+            }
+        }
+    }
+    
+    return results;
 }
 
 /**
