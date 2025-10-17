@@ -471,6 +471,29 @@ export class SearchController {
     }
 
     /**
+     * Get all symbols from the workspace without filtering
+     */
+    async getAllSymbols(options: SearchOptions = {}): Promise<Map<string, Symbol[]>> {
+        // Merge with default options
+        const searchOptions: SearchOptions = {
+            ...this.config.defaultSearchOptions,
+            ...options
+        };
+
+        // Create cancellation token
+        const token = this.workspaceScanner.createCancellationToken();
+
+        try {
+            // Scan workspace and get all symbols
+            const symbolsMap = await this.workspaceScanner.scanWorkspace(searchOptions, undefined, token);
+            return symbolsMap || new Map();
+        } catch (error) {
+            console.error('Error getting all symbols:', error);
+            return new Map();
+        }
+    }
+
+    /**
      * Create a cancellation token for search operations
      */
     createCancellationToken(): CancellationToken {

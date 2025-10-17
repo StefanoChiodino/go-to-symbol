@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { SearchController } from './search-controller';
-import { SearchOptions, SearchResult, SymbolType } from './types';
+import { SearchOptions, SearchResult, SymbolType, Symbol } from './types';
 import { ConfigurationManager } from './config-manager';
 import { ErrorHandler, ErrorCategory, ErrorSeverity, withErrorHandling } from './error-handler';
 import { ProgressManager, ProgressType, FeedbackType } from './progress-manager';
@@ -15,13 +15,12 @@ let progressManager: ProgressManager;
  * The extension is activated the very first time the command is executed
  */
 export function activate(context: vscode.ExtensionContext) {
-    console.log('Go to Symbol extension is now active');
-    vscode.window.showInformationMessage('Go to Symbol extension activated!');
+    console.log('[Go to Symbol] Extension is now active');
     
     // Debug: Log all registered commands
     vscode.commands.getCommands().then(commands => {
         const ourCommands = commands.filter(cmd => cmd.startsWith('go-to-symbol'));
-        console.log('Our registered commands:', ourCommands);
+        console.log('[Go to Symbol] Our registered commands:', ourCommands);
     });
 
     try {
@@ -41,7 +40,11 @@ export function activate(context: vscode.ExtensionContext) {
         // Initialize search controller if workspace is available
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         if (workspaceRoot) {
+            console.log('[Go to Symbol] Initializing search controller for workspace:', workspaceRoot);
             searchController = new SearchController(workspaceRoot, getSearchControllerConfig());
+            console.log('[Go to Symbol] Search controller initialized successfully');
+        } else {
+            console.log('[Go to Symbol] No workspace folder found');
         }
     } catch (error) {
         console.error('Failed to initialize Enhanced Symbol Search:', error);
@@ -285,19 +288,46 @@ async function showRealTimeSearchPicker(): Promise<void> {
     // Load symbols in background
     const loadSymbols = async () => {
         try {
+            console.log('[Go to Symbol] Starting symbol loading...');
             const searchOptions = getSearchOptionsFromConfig();
-            // Search with empty query to get all symbols
-            allSymbols = await searchController!.executeSearch('', {
-                ...searchOptions,
-                maxResults: 10000, // Get more symbols for better filtering
-                fuzzyMatch: false
-            });
+            console.log('[Go to Symbol] Search options:', searchOptions);
+            
+            // Get all symbols by scanning the workspace directly
+            const symbolsMap = await searchController!.getAllSymbols(searchOptions);
+            console.log('[Go to Symbol] Found', symbolsMap.size, 'files with symbols');
+            
+            // Convert symbols map to search results
+            allSymbols = [];
+            for (const [filePath, symbols] of symbolsMap) {
+                console.log('[Go to Symbol] Processing file:', filePath, 'with', symbols.length, 'symbols');
+                for (const symbol of symbols) {
+                    const result: SearchResult = {
+                        symbolName: symbol.name,
+                        symbolType: symbol.type,
+                        filePath,
+                        lineNumber: symbol.line,
+                        columnNumber: symbol.column || 0,
+                        preview: symbol.signature || symbol.name,
+                        score: 1.0,
+                        language: detectLanguageFromPath(filePath),
+                        context: {
+                            parent: symbol.parent,
+                            signature: symbol.signature,
+                            decorators: symbol.decorators
+                        }
+                    };
+                    allSymbols.push(result);
+                }
+            }
+            
+            console.log('[Go to Symbol] Total symbols loaded:', allSymbols.length);
             isLoading = false;
             quickPick.busy = false;
             
             // Show initial results
             updateQuickPickItems('');
         } catch (error) {
+            console.error('[Go to Symbol] Error loading symbols:', error);
             isLoading = false;
             quickPick.busy = false;
             quickPick.placeholder = 'Error loading symbols. Try typing to search...';
@@ -344,7 +374,12 @@ async function showRealTimeSearchPicker(): Promise<void> {
         // Debounce search to avoid too many updates
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(() => {
-            updateQuickPickItems(query);
+            if (query.trim() && allSymbols.length === 0 && !isLoading) {
+                // If we have a query but no symbols loaded, try a direct search
+                performDirectSearch(query);
+            } else {
+                updateQuickPickItems(query);
+            }
         }, 100);
     });
 
@@ -362,6 +397,47 @@ async function showRealTimeSearchPicker(): Promise<void> {
         clearTimeout(searchTimeout);
         quickPick.dispose();
     });
+
+    // Perform direct search when symbols aren't pre-loaded
+    const performDirectSearch = async (query: string) => {
+        if (isLoading) return;
+        
+        console.log('[Go to Symbol] Performing direct search for:', query);
+        isLoading = true;
+        quickPick.busy = true;
+        
+        try {
+            const searchOptions = getSearchOptionsFromConfig();
+            console.log('[Go to Symbol] Direct search options:', searchOptions);
+            
+            const results = await searchController!.executeSearch(query, {
+                ...searchOptions,
+                maxResults: 100
+            });
+            
+            console.log('[Go to Symbol] Direct search found', results.length, 'results');
+            
+            const quickPickItems: SearchResultQuickPickItem[] = results.map(result => ({
+                label: `$(symbol-${getSymbolIcon(result.symbolType)}) ${result.symbolName}`,
+                description: result.preview,
+                detail: `${result.language} • ${getRelativePath(result.filePath)} • Line ${result.lineNumber + 1}`,
+                searchResult: result
+            }));
+
+            quickPick.items = quickPickItems;
+        } catch (error) {
+            console.error('[Go to Symbol] Direct search error:', error);
+            quickPick.items = [{
+                label: '$(error) Search failed',
+                description: 'Try a different query or check the console for errors',
+                detail: '',
+                searchResult: null as any
+            }];
+        } finally {
+            isLoading = false;
+            quickPick.busy = false;
+        }
+    };
 
     // Show the QuickPick and start loading
     quickPick.show();
@@ -552,6 +628,31 @@ function getRelativePath(absolutePath: string): string {
         return absolutePath.substring(workspaceRoot.length + 1);
     }
     return absolutePath;
+}
+
+/**
+ * Detect language from file path
+ */
+function detectLanguageFromPath(filePath: string): string {
+    const ext = filePath.split('.').pop()?.toLowerCase();
+    
+    const languageMap: Record<string, string> = {
+        'py': 'python',
+        'pyi': 'python',
+        'pyx': 'python',
+        'js': 'javascript',
+        'ts': 'typescript',
+        'jsx': 'javascript',
+        'tsx': 'typescript',
+        'java': 'java',
+        'cs': 'csharp',
+        'cpp': 'cpp',
+        'c': 'c',
+        'h': 'c',
+        'hpp': 'cpp'
+    };
+    
+    return languageMap[ext || ''] || 'text';
 }
 
 /**
